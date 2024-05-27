@@ -17,35 +17,35 @@ ftplib library for FTP (included with Python standard library)
 File Descriptions
 
 
-### main.py
+** main.py **
 
 Handles the main workflow of the application, providing a user interface for initiating file transfers and managing connections.
 
-### ftp_client.py
+** ftp_client.py **
 
 Implements the FTP client using the ftplib library. Functions include connecting to an FTP server, uploading files, and downloading files.
 
-### ftp_threads.py
+** ftp_threads.py **
 
 Manages FTP file transfers using multiple threads. This allows for concurrent uploading and downloading of files, significantly improving transfer speeds.
 
-### sftp_client.py
+** sftp_client.py **
 
 Implements the SFTP client using the paramiko library. Functions include connecting to an SFTP server, uploading files, and downloading files.
 
-### sftp_threads.py
+** sftp_threads.py **
 
 Manages SFTP file transfers using multiple threads, similar to the FTP threading module.
 
-### database.py
+** database.py **
 
 Handles database interactions using sqlite3. This module is responsible for storing and retrieving file transfer logs and other configurations.
 
-### Contributing
+### Contributing 
 We welcome contributions from the community! To contribute:
 
 
-## License
+## License 
 This project is licensed under the MIT License. See the LICENSE file for more details.
 
 # Additional Resources
