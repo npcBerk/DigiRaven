@@ -3,14 +3,14 @@ requires = ["setuptools", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "melisauyar"
+name = " "
 version = "0.0.1"
 authors = [
-    { name = "Melisa Uyar", email = "melisauyar5225@gmail.com" },
+    { name = " ", email = " @gmail.com" },
 ]
 description = "A simple package for calculating statistics."
 readme = "README.md"
-keywords = ["melisau", "statistics"]
+keywords = [" ", " "]
 requires-python = ">=3.6.0"
 classifiers = [
     "Development Status :: 3 - Alpha",
@@ -21,4 +21,4 @@ classifiers = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/melisau/melisauyar"
+Homepage = "https://github.com/"
