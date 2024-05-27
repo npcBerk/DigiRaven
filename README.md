@@ -41,9 +41,6 @@ Manages SFTP file transfers using multiple threads, similar to the FTP threading
 
 Handles database interactions using sqlite3. This module is responsible for storing and retrieving file transfer logs and other configurations.
 
-### Contributing 
-We welcome contributions from the community! To contribute:
-
 
 ## License 
 This project is licensed under the MIT License. See the LICENSE file for more details.
