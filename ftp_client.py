@@ -1,48 +1,84 @@
+# ftp_client.py
 import os
 import wx
-from ftplib import FTP
+from ftplib import FTP as ftplib_FTP, error_perm
 from pubsub import pub
-from ftp_threads import Path
 
 def send_status(message, topic='update_status'):
     """Durum güncellemelerini yayınlar."""
     wx.CallAfter(pub.sendMessage, topic, message=message)
 
+class Path:
+    """FTP sunucusundaki dosya veya dizinler için bir yol nesnesi."""
+    def __init__(self, ftype, size, filename, date):
+        self.folder = 'd' in ftype
+        self.size = size
+        self.filename = filename
+        self.last_modified = date
 class FTP:
     """FTP bağlantısını yöneten sınıf."""
 
     def __init__(self, folder=None):
         self.folder = folder
+        self.ftp = None
 
     def connect(self, host, port, username, password):
         """FTP sunucusuna bağlanır."""
         try:
-            self.ftp = FTP()
+            self.ftp = ftplib_FTP()
             self.ftp.connect(host, port)
             self.ftp.login(username, password)
-            send_status(self.ftp.getwelcome())
-            send_status('Connected', topic='update_statusbar')
+            welcome_message = "Connected to FTP server"
+            send_status(welcome_message)
+            send_status('Connected to server wthiout any errors.', topic='update_statusbar')
             self.get_dir_listing()
+        except error_perm as e:
+            send_status(f'Permission error: {e}', topic='update_statusbar')
+
         except Exception as e:
-            send_status(f'Disconnected: {str(e)}', topic='update_statusbar')
+            if str(e).startswith('[Errno 11001]'):
+                send_status(f'Disconnected: {str(e)}. Please check the hostname or IP address.', topic='update_statusbar')
+            else:
+                send_status(f'Disconnected: {str(e)}', topic='update_statusbar')
+
 
     def disconnect(self):
         """FTP sunucusundan bağlantıyı keser."""
-        self.ftp.quit()
+        if self.ftp:
+            try:
+                goodbye_message = "Disconnected from FTP server"
+                send_status(goodbye_message)
+                self.ftp.quit()
+                send_status('Disconnected from server without any errors.', topic='update_statusbar')
+            except Exception as e:
+                send_status(f'Error during disconnect: {str(e)}', topic='update_statusbar')
 
     def change_directory(self, folder):
         """Sunucu üzerindeki dizini değiştirir."""
-        self.ftp.cwd(folder)
-        self.get_dir_listing()
-        current_directory = self.ftp.pwd()
-        send_status(f'Changed directory to {current_directory}')
+        try:
+            self.ftp.cwd(folder)
+            self.get_dir_listing()
+            current_directory = self.ftp.pwd()
+            send_status(f'Changed directory to {current_directory}')
+        except Exception as e:
+            send_status(f'Error changing directory: {str(e)}')
 
+    def prev_directory(self):
+        try:
+            self.ftp.cwd('..')
+            self.get_dir_listing()
+            current_directory = self.ftp.pwd()
+            send_status(f'Changed directory to {current_directory}')
+        except Exception as e:
+            send_status(f'Error changing to previous directory: {str(e)}')
     def get_dir_listing(self):
         """Dizin listesini alır."""
         if self.ftp:
             data = []
             self.ftp.dir(data.append)
             self.parse_data(data)
+        else:
+            data = []
 
     def parse_data(self, data):
         """Dizin verilerini analiz eder."""
@@ -50,7 +86,11 @@ class FTP:
         for item in data:
             parts = item.split()
             ftype = parts[0]
-            size = parts[4]
+            size = int(int(parts[4])/1024)
+            if size == 0:
+                size = "0 KB"
+            else:
+                size = str(size).__add__(" KB")
             if len(parts) > 9:
                 filename = ' '.join(parts[8:])
             else:
@@ -72,116 +112,63 @@ class FTP:
         except Exception as e:
             send_status(f'Unable to delete {filename}: {str(e)}')
 
+    def rename(self, from_name, to_name):
+        """Sunucudaki dosya veya dizini yeniden adlandırır."""
+        try:
+            self.ftp.rename(from_name, to_name)
+            send_status(f'{from_name} renamed to {to_name}')
+            self.get_dir_listing()
+        except Exception as e:
+            send_status(f'Error renaming {from_name} to {to_name}: {str(e)}')
+
     def download_files(self, paths, local_folder):
         """Dosyaları indirir."""
         for path in paths:
             try:
-                full_path = os.path.join(local_folder, path)
+                full_path = os.path.join(local_folder, os.path.basename(path))
                 with open(full_path, 'wb') as local_file:
-                    self.ftp.retrbinary('RETR ' + path, local_file.write)
-                    message = f'Downloaded: {path}'
-                    send_status(message)
+                    self.ftp.retrbinary(f'RETR {path}', local_file.write)
+                    send_status(f'Downloaded: {path}')
             except Exception as e:
                 send_status(f'Error downloading {path}: {str(e)}')
 
-    def upload_files(self, paths):
-        """Dosyaları sunucuya yükler."""
-        txt_files = [".txt", ".htm", ".html"]
-        for path in paths:
-            _, ext = os.path.splitext(path)
-            if ext in txt_files:
-                with open(path) as fobj:
-                    self.ftp.storlines('STOR ' + os.path.basename(path), fobj)
-            else:
-                with open(path, 'rb') as fobj:
-                    self.ftp.storbinary('STOR ' + os.path.basename(path), fobj, 1024)
-            send_status(f'Uploaded {path}')
-        count = len(paths)
-        send_status(f'{count} file(s) uploaded successfully')
-        self.get_dir_listing()
 
-class FTPDialog(wx.Frame):
-    """FTP istemcisini gösteren pencere sınıfı."""
+    def upload_files(self, local_path, remote_path):
+        """Dosyayı FTP sunucusuna yükler."""
+        try:
+            with open(local_path, 'rb') as file:
+                self.ftp.storbinary(f'STOR {remote_path}', file)
+            send_status(f"Uploaded {local_path} successfully.")
+            self.get_dir_listing()
+        except Exception as e:
+            send_status(f"Failed to upload {local_path}: {str(e)}")
 
-    def __init__(self, parent, title):
-        super(FTPDialog, self).__init__(parent, title=title, size=(400, 400))
+    def copy_file(self, src, dst):
+        """Sunucuda dosyayı bir konumdan diğerine kopyalar."""
+        try:
+            with open('tempfile', 'wb') as f:
+                self.ftp.retrbinary(f'RETR {src}', f.write)
+            with open('tempfile', 'rb') as f:
+                self.ftp.storbinary(f'STOR {dst}', f)
+            os.remove('tempfile')
+            send_status(f'File copied from {src} to {dst}')
+            self.get_dir_listing()
+        except Exception as e:
+            send_status(f'Error copying file from {src} to {dst}: {str(e)}')
 
-        # Ana panel oluştur
-        panel = wx.Panel(self)
-        # Sizer oluştur
-        sizer = wx.BoxSizer(wx.VERTICAL)
-        logo_path = "digi.png"
-        image = wx.Image(logo_path, wx.BITMAP_TYPE_ANY)
-        image = image.Scale(100, 100, wx.IMAGE_QUALITY_HIGH)
-        wx_image = wx.StaticBitmap(panel, wx.ID_ANY, wx.Bitmap(image))
-        sizer.Add(wx_image, 0, wx.CENTER)
-
-        # Bağlantı bilgileri için alanlar
-        host_label = wx.StaticText(panel, label="Host:")
-        self.host_text = wx.TextCtrl(panel, value="example.com")
-
-        username_label = wx.StaticText(panel, label="Username:")
-        self.username_text = wx.TextCtrl(panel, value="Enter Username")
-
-        password_label = wx.StaticText(panel, label="Password:")
-        self.password_text = wx.TextCtrl(panel, value="Enter Password", style=wx.TE_PASSWORD)
-
-        port_label = wx.StaticText(panel, label="Port:")
-        self.port_text = wx.TextCtrl(panel, value="22")
-
-        # Bağlanma butonu
-        connect_button = wx.Button(panel, label="Connect")
-        connect_button.Bind(wx.EVT_BUTTON, self.on_connect)
-
-        # Sizer'a bileşenleri ekle
-        sizer.Add(host_label, 0, wx.CENTER)
-        sizer.Add(self.host_text, 0, wx.CENTER)
-        sizer.Add(username_label, 0, wx.CENTER)
-        sizer.Add(self.username_text, 0, wx.CENTER)
-        sizer.Add(password_label, 0, wx.CENTER)
-        sizer.Add(self.password_text, 0, wx.CENTER)
-        sizer.Add(port_label, 0, wx.CENTER)
-        sizer.Add(self.port_text, 0, wx.CENTER)
-        sizer.Add(connect_button, 0, wx.CENTER)
-
-        # Panel için sizer'ı ayarla
-        panel.SetSizer(sizer)
-
-        # Pencereyi göster
-        self.Show()
-
-    def on_connect(self, event):
-        """Bağlantıyı kurar ve FTP işlemlerini gerçekleştirir."""
-        # Bağlantı bilgilerini al
-        host = self.host_text.GetValue()
-        username = self.username_text.GetValue()
-        password = self.password_text.GetValue()
-        port_str = self.port_text.GetValue()
-
-        # Port değerini kontrol et ve uygun bir şekilde işle
-        if port_str.strip():  # Port değeri boş olmadığından emin ol
-            try:
-                port = int(port_str)  # Port değerini integer'a çevir
-                if 0 < port <= 65535:  # Geçerli bir port aralığında olduğundan emin ol
-                    self.SetStatusText('Connecting...', 1)
-                    self.ftp = FTP()
-                    try:
-                        self.ftp.connect(host, port)
-                        self.ftp.login(username, password)
-                        self.SetStatusText('Connected', 1)
-                        print("FTP connection successful!")
-                        # Bağlantı başarılıysa burada yapılacak işlemleri gerçekleştirin
-                    except Exception as e:
-                        self.SetStatusText('Connection failed', 1)
-                        print(f"Bağlantı hatası: {str(e)}")
+    def copy_folder(self, src, dst):
+        """Sunucuda klasörü bir konumdan diğerine kopyalar."""
+        try:
+            if not self.path_exists(dst):
+                self.ftp.mkd(dst)
+            for item in self.ftp.nlst(src):
+                item_name = os.path.basename(item)
+                src_item = os.path.join(src, item_name)
+                dst_item = os.path.join(dst, item_name)
+                if self.is_directory(src_item):
+                    self.copy_folder(src_item, dst_item)
                 else:
-                    self.SetStatusText('Invalid port', 1)
-            except ValueError:
-                self.SetStatusText('Invalid port', 1)
-        else:
-            self.SetStatusText('Port is empty', 1)
-
-if __name__ == "__main__":
-    app = wx.App()
-    dialog = FTPDialog(None, title="FTP Client")
-    app.MainLoop()
+                    self.copy_file(src_item, dst_item)
+            send_status(f'Folder copied from {src} to {dst}')
+        except Exception as e:
+            send_status(f'Error copying folder from {src} to {dst}: {str(e)}')
