@@ -25,17 +25,11 @@ Handles the main workflow of the application, providing a user interface for ini
 
 Implements the FTP client using the ftplib library. Functions include connecting to an FTP server, uploading files, and downloading files.
 
-**ftp_threads.py**
-
-Manages FTP file transfers using multiple threads. This allows for concurrent uploading and downloading of files, significantly improving transfer speeds.
 
 **sftp_client.py**
 
 Implements the SFTP client using the paramiko library. Functions include connecting to an SFTP server, uploading files, and downloading files.
 
-**sftp_threads.py**
-
-Manages SFTP file transfers using multiple threads, similar to the FTP threading module.
 
 **database.py**
 
